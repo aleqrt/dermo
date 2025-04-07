@@ -48,7 +48,7 @@ def build_cnn_model(input_shape, num_classes, pretrained_weights='imagenet', bac
     # base_model.trainable = False
 
     # Pass input through the base model
-    x = base_model(x, training=False)
+    x = base_model(x, training=True)
 
     # Add custom classification head with two extra dense layers
     x = layers.GlobalAveragePooling2D(name='avg_pool')(x)

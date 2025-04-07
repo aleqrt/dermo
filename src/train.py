@@ -99,7 +99,7 @@ if metadata_df is not None:
             )
             early_stopping = tf.keras.callbacks.EarlyStopping(
                 monitor='val_loss',     # Monitor validation loss
-                patience=10,            # Stop after 10 epochs with no improvement
+                patience=20,            # Stop after 10 epochs with no improvement
                 verbose=1,
                 mode='min',             # Minimize loss
                 restore_best_weights=True # Restore weights from the best epoch
@@ -107,7 +107,7 @@ if metadata_df is not None:
             reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
                 factor=0.2,             # Reduce LR by a factor of 5
-                patience=5,             # Reduce after 5 epochs with no improvement
+                patience=10,             # Reduce after 5 epochs with no improvement
                 verbose=1,
                 min_lr=1e-6             # Minimum learning rate
             )
