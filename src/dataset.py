@@ -18,30 +18,118 @@ def load_metadata(metadata_path):
         print(f"Error: Metadata file not found at {metadata_path}")
         return None
 
-def get_image_path(image_id):
-    """Constructs the full path for a given image ID."""
-    # --- Adjust this logic based on your image folder structure ---
-    # Example 1: Images split into two folders
+
+def get_original_image_path(image_id):
+    """Returns the original image path for a given image ID (ignoring augmented images)."""
     path1 = os.path.join(config.IMAGE_DIR_PART1, f"{image_id}.jpg")
     path2 = os.path.join(config.IMAGE_DIR_PART2, f"{image_id}.jpg")
     if os.path.exists(path1):
         return path1
     elif os.path.exists(path2):
         return path2
-    # Example 2: All images in a single folder
-    # path = os.path.join(config.IMAGE_DIR, f"{image_id}.jpg")
-    # if os.path.exists(path):
-    #     return path
     else:
-        # print(f"Warning: Image file not found for ID: {image_id}")
-        return None # Handle missing images if necessary
+        return None
+    
+
+def get_image_path(image_id):
+    """Constructs a list of full paths for a given image ID, including both original and augmented images.
+
+    It searches for:
+      - Augmented images in 'HAM10000_images_part_1_aug' and 'HAM10000_images_part_2_aug' folders.
+      - Original images in 'HAM10000_images_part_1' and 'HAM10000_images_part_2' folders.
+    
+    Returns:
+      A list of paths that exist. If no files are found, returns an empty list.
+    """
+    paths = []
+    # Define augmented directories (assumes they are alongside the original ones)
+    aug_dir_part1 = os.path.join(os.path.dirname(config.IMAGE_DIR_PART1), "HAM10000_images_part_1_aug")
+    aug_dir_part2 = os.path.join(os.path.dirname(config.IMAGE_DIR_PART2), "HAM10000_images_part_2_aug")
+    
+    # Check for all augmented variants.
+    for folder in [aug_dir_part1, aug_dir_part2]:
+        for suffix in ['_flip', '_rot', '_zoom', '_trans']:
+            candidate = os.path.join(folder, f"{image_id}{suffix}.jpg")
+            if os.path.exists(candidate):
+                paths.append(candidate)
+    
+    # Check original images in both parts.
+    candidate1 = os.path.join(config.IMAGE_DIR_PART1, f"{image_id}.jpg")
+    candidate2 = os.path.join(config.IMAGE_DIR_PART2, f"{image_id}.jpg")
+    if os.path.exists(candidate1):
+        paths.append(candidate1)
+    elif os.path.exists(candidate2):
+        paths.append(candidate2)
+    
+    return paths
+
 
 def prepare_data(metadata_df):
-    """Prepares image paths and labels from the metadata."""
-    metadata_df['image_path'] = metadata_df['image_id'].apply(get_image_path)
-    # Drop rows where image path couldn't be found
+    """Prepares image paths and labels from the metadata.
+    
+    If classification is multiclass, get_image_path returns a list of file paths (augmented and original)
+    and we explode the list. If binary classification is selected, we load only the original images.
+    Then, if binary classification is selected, we convert the 'dx' labels into binary labels
+    (only 'mel' is malignant, all others benign).
+    """
+    # Load image paths differently depending on classification type.
+    if config.CLASSIFICATION_TYPE == 'binary':
+        # For binary classification, use only original images.
+        metadata_df['image_path'] = metadata_df['image_id'].apply(get_original_image_path)
+    else:
+        # For multiclass, load all images (augmented and original).
+        metadata_df['image_path'] = metadata_df['image_id'].apply(get_image_path)
+        # Explode if the column contains lists.
+        if metadata_df['image_path'].apply(lambda x: isinstance(x, list)).any():
+            metadata_df = metadata_df.explode('image_path')
+    
+    # Drop rows where no image path was found.
     metadata_df = metadata_df.dropna(subset=['image_path'])
     print(f"Data prepared. Found {metadata_df.shape[0]} images.")
+
+    if config.CLASSIFICATION_TYPE == 'binary':
+        # For binary classification: only 'mel' is malignant (1), others benign (0).
+        metadata_df['label_binary'] = metadata_df['dx'].apply(lambda x: 1 if x == 'mel' else 0)
+        # Cast to float32 and reshape to (n_samples, 1) for BinaryCrossentropy.
+        labels = metadata_df['label_binary'].values.astype('float32').reshape(-1, 1)
+        class_names = ['benign', 'malignant']
+        print("Binary classification: 'mel' => malignant (1), others => benign (0)")
+    else:
+        label_encoder = LabelEncoder()
+        metadata_df['label_encoded'] = label_encoder.fit_transform(metadata_df['dx'])
+        labels = metadata_df['label_encoded'].values
+        class_names = label_encoder.classes_
+        print("Classes:", class_names)
+        print("Label encoding:", dict(zip(class_names, range(len(class_names)))))
+
+    # Print the number of instances per class (will reflect the original distribution).
+    counts = metadata_df['dx'].value_counts()
+    print("Number of instances per class:")
+    for cls, count in counts.items():
+        print(f"  {cls}: {count}")
+
+    image_paths = metadata_df['image_path'].values
+    return image_paths, labels, class_names
+
+
+
+
+'''def prepare_data(metadata_df):
+    """Prepares image paths and labels from the metadata, including augmented images.
+    
+    This function applies get_image_path to produce a list of image paths for each image_id,
+    then explodes the list so each row corresponds to one file (original or augmented).
+    """
+    # Get list of image paths (each entry will be a list)
+    metadata_df['image_paths'] = metadata_df['image_id'].apply(get_image_path)
+    # Drop rows where no images were found
+    metadata_df = metadata_df[metadata_df['image_paths'].apply(lambda x: len(x) > 0)]
+    # Explode so each row is one image file
+    metadata_df = metadata_df.explode('image_paths')
+    # Rename column for consistency
+    metadata_df = metadata_df.rename(columns={'image_paths': 'image_path'})
+    
+    print(f"Data prepared. Found {metadata_df.shape[0]} images (including augmented images).")
 
     # Encode labels (dx column contains the lesion type)
     label_encoder = LabelEncoder()
@@ -52,13 +140,16 @@ def prepare_data(metadata_df):
     print("Classes:", class_names)
     print("Label encoding:", dict(zip(class_names, range(len(class_names)))))
 
+    # Print the number of instances per class
+    counts = metadata_df['dx'].value_counts()
+    print("Number of instances per class:")
+    for cls, count in counts.items():
+        print(f"  {cls}: {count}")
+
     image_paths = metadata_df['image_path'].values
     labels = metadata_df['label_encoded'].values
 
-    # Return paths, labels, and potentially other columns needed for stratification (like patient_id)
-    # For standard StratifiedKFold, we only need labels.
-    # For Triple Stratification, you'd return metadata_df[['patient_id', 'dx', ...]] as well
-    return image_paths, labels, class_names
+    return image_paths, labels, class_names'''
 
 
 # --- Data Splitting ---
@@ -73,6 +164,7 @@ def get_train_val_split(image_paths, labels):
     )
     print(f"Data split into Training ({len(X_train)}) and Validation ({len(X_val)}) sets.")
     return X_train, X_val, y_train, y_val
+
 
 def get_kfold_splits(image_paths, labels):
     """Generates indices for K-Fold cross-validation splits."""
@@ -100,6 +192,7 @@ def decode_image(image_path):
     # img = img / 255.0
     return img
 
+
 def build_augmentation_pipeline():
     """Builds a sequential model for data augmentation."""
     # Use Keras preprocessing layers for augmentation
@@ -118,24 +211,21 @@ def build_augmentation_pipeline():
 # Create the augmentation pipeline once
 augmentation_pipeline = build_augmentation_pipeline() if config.AUGMENTATION else None
 
+
 def preprocess_image(image_path, label, augment):
     """Loads, preprocesses, and potentially augments an image."""
     img = decode_image(image_path)
 
     # Apply model-specific preprocessing (e.g., for EfficientNet, ResNet, ViT)
-    # This is often done *inside* the model definition or just before feeding to the model
-    # Example for EfficientNet:
-    # img = tf.keras.applications.efficientnet.preprocess_input(img)
-    # Example for standard [0, 1] scaling:
     img = img / 255.0
 
-    # Apply augmentation if specified
-    if augment and augmentation_pipeline:
-        # Add a batch dimension (now shape becomes (1, H, W, C))
-        img = tf.expand_dims(img, axis=0)
-        img = augmentation_pipeline(img, training=True) # Important: set training=True
-        # Remove the extra batch dimension by reshaping explicitly to the input shape
-        img = tf.reshape(img, config.INPUT_SHAPE)  # e.g. (224, 224, 3)
+    '''# Apply augmentation if specified and if not already an augmented image
+    if augment and ("aug" not in image_path.lower()):
+        if augmentation_pipeline:
+            # Add a batch dimension, apply augmentation, and remove the batch dimension.
+            img = tf.expand_dims(img, axis=0)
+            img = augmentation_pipeline(img, training=True)
+            img = tf.reshape(img, config.INPUT_SHAPE)'''
     return img, label
 
 

@@ -1,8 +1,10 @@
 import tensorflow as tf
 import pandas as pd
 import numpy as np
+import random
 import os
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.utils.class_weight import compute_class_weight
 
 # Import project modules
 import config
@@ -12,6 +14,12 @@ import utils
 
 # --- Setup ---
 print("GPUs Available: ", tf.config.list_physical_devices('GPU'))
+# tf.config.run_functions_eagerly(True)
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+tf.random.set_seed(seed)
 
 # Ensure output directories exist
 os.makedirs(config.MODEL_SAVE_DIR, exist_ok=True)
@@ -42,6 +50,13 @@ if metadata_df is not None:
         print(f"Starting {config.N_SPLITS}-Fold Cross-Validation...")
         fold_indices = dataset.get_kfold_splits(all_image_paths, all_labels)
 
+        # Assuming `all_labels` contains the encoded labels
+        class_weights = None
+        if config.CLASSIFICATION_TYPE == 'classification':
+            class_weights = compute_class_weight('balanced', classes=np.unique(all_labels), y=all_labels)
+            class_weights = dict(enumerate(class_weights))
+            print("Computed class weights:", class_weights)
+
         for fold, (train_idx, val_idx) in enumerate(fold_indices):
             print(f"\n===== FOLD {fold + 1}/{config.N_SPLITS} =====")
 
@@ -66,19 +81,20 @@ if metadata_df is not None:
 
             # Compile the model
             print("Compiling model...")
-            model.compile(optimizer=config.OPTIMIZER,
+            optimizer = tf.keras.optimizers.Adam(learning_rate=config.LEARNING_RATE)
+            model.compile(optimizer=optimizer,
                           loss=config.LOSS,
                           metrics=config.METRICS)
             # model.summary() # Optional: Print model summary
 
             # Define callbacks for this fold
-            fold_model_save_path = os.path.join(config.MODEL_SAVE_DIR, f'{config.MODEL_TYPE}_fold_{fold+1}.keras') # Use .keras format
+            fold_model_save_path = os.path.join(config.MODEL_SAVE_DIR, f'{model.name}_fold_{fold+1}.keras')
             checkpoint = tf.keras.callbacks.ModelCheckpoint(
                 filepath=fold_model_save_path,
-                monitor='val_accuracy', # Monitor validation accuracy
-                save_best_only=True,    # Save only the best model
-                save_weights_only=False, # Save the entire model
-                mode='max',             # Maximize accuracy
+                monitor='val_accuracy',     # Monitor validation accuracy
+                save_best_only=True,        # Only save the best model
+                save_weights_only=False,    # Save the entire model
+                mode='max',                 # We want to maximize accuracy
                 verbose=1
             )
             early_stopping = tf.keras.callbacks.EarlyStopping(
@@ -108,6 +124,7 @@ if metadata_df is not None:
                 epochs=config.EPOCHS,
                 validation_data=val_ds,
                 callbacks=callbacks_list,
+                class_weight=class_weights,
                 verbose=1 # Set to 1 or 2 for progress updates
             )
             fold_histories.append(history)
@@ -115,18 +132,21 @@ if metadata_df is not None:
             # Load the best model saved by ModelCheckpoint for evaluation
             print(f"Loading best model from fold {fold + 1} for evaluation...")
             best_model = tf.keras.models.load_model(fold_model_save_path)
+            
+            # Compute predictions on the validation set
+            y_pred_probs = best_model.predict(val_ds)
+            y_pred_classes = np.argmax(y_pred_probs, axis=1)
 
             # Evaluate the best model on the validation set for this fold
             print(f"Evaluating fold {fold + 1} model on validation data...")
             evaluation = best_model.evaluate(val_ds, verbose=0)
             print(f"Fold {fold + 1} Validation Loss: {evaluation[0]:.4f}")
             print(f"Fold {fold + 1} Validation Accuracy: {evaluation[1]:.4f}")
-            if len(evaluation) > 2:
-                 print(f"Fold {fold + 1} Validation Top 2 Accuracy: {evaluation[2]:.4f}")
             fold_evaluations.append(evaluation)
 
             # Plot training history for this fold
             utils.plot_training_history(history, fold=fold)
+            utils.plot_roc_curves(y_val, y_pred_probs, class_names, fold=fold)
 
             # Clear session memory (important in K-Fold loops)
             tf.keras.backend.clear_session()
@@ -135,11 +155,9 @@ if metadata_df is not None:
         print("\n===== K-Fold Cross-Validation Summary =====")
         avg_loss = np.mean([eval[0] for eval in fold_evaluations])
         avg_acc = np.mean([eval[1] for eval in fold_evaluations])
+        avg_roc = np.mean([eval[2] for eval in fold_evaluations])
         print(f"Average Validation Loss across {config.N_SPLITS} folds: {avg_loss:.4f}")
         print(f"Average Validation Accuracy across {config.N_SPLITS} folds: {avg_acc:.4f}")
-        if len(fold_evaluations[0]) > 2:
-            avg_top2_acc = np.mean([eval[2] for eval in fold_evaluations])
-            print(f"Average Validation Top 2 Accuracy across {config.N_SPLITS} folds: {avg_top2_acc:.4f}")
 
     else:
         # --- Single Train/Validation Split Training ---
@@ -175,10 +193,10 @@ if metadata_df is not None:
             filepath=model_save_path, monitor='val_accuracy', save_best_only=True, save_weights_only=False, mode='max', verbose=1
         )
         early_stopping = tf.keras.callbacks.EarlyStopping(
-            monitor='val_loss', patience=10, verbose=1, mode='min', restore_best_weights=True
+            monitor='val_loss', patience=15, verbose=1, mode='min', restore_best_weights=True
         )
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-            monitor='val_loss', factor=0.2, patience=5, verbose=1, min_lr=1e-6
+            monitor='val_loss', factor=0.1, patience=10, verbose=1, min_lr=1e-6
         )
         # tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=config.LOG_DIR, histogram_freq=1)
         callbacks_list = [checkpoint, early_stopping, reduce_lr] # Add tensorboard_callback if used
@@ -202,9 +220,8 @@ if metadata_df is not None:
         evaluation = best_model.evaluate(val_ds, verbose=1)
         print(f"Final Validation Loss: {evaluation[0]:.4f}")
         print(f"Final Validation Accuracy: {evaluation[1]:.4f}")
-        if len(evaluation) > 2:
-            print(f"Final Validation Top 2 Accuracy: {evaluation[2]:.4f}")
-
+        print(f"Final Validation ROC-AUC: {evaluation[2]:.4f}")
+        
 
         # --- Optional: Detailed Evaluation (Confusion Matrix, Classification Report) ---
         print("\nGenerating detailed evaluation report on validation data...")
