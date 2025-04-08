@@ -40,7 +40,7 @@ PRETRAINED_WEIGHTS = 'imagenet'
 # --- Training Configuration ---
 BATCH_SIZE = 128
 EPOCHS = 150
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 
 # Data augmentation settings
 AUGMENTATION = True
