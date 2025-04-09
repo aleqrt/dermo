@@ -1,4 +1,4 @@
-# DermO: Skin Lesion Classification
+# Dermo: Skin Lesion Classification
 
 A deep learning project for skin lesion classification using the HAM10000 dataset. The model can be configured for either binary (malignant vs benign) or multiclass (7 lesion types) classification.
 
