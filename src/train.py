@@ -91,10 +91,14 @@ if metadata_df is not None:
 
         # Compile the model
         print("Compiling model...")
-        optimizer = tf.keras.optimizers.Adam(learning_rate=config.LEARNING_RATE)
+        optimizer = tf.keras.optimizers.Adam(
+                        learning_rate=config.LEARNING_RATE,
+                        clipnorm=1.0
+                    )
         model.compile(optimizer=optimizer,
-                        loss=config.LOSS,
-                        metrics=config.METRICS)
+                      loss=config.LOSS,
+                      metrics=config.METRICS
+                      )
         # model.summary() # Optional: Print model summary
 
         # Define callbacks for this fold
