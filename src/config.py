@@ -12,11 +12,11 @@ IMAGE_DIR_PART2 = os.path.join(DATA_DIR, 'HAM10000_images_part_2')
 
 # --- Classification Type ---
 # Options: 'multiclass', 'binary'
-# For binary classification, only melanoma ('mel') is malignant; all others are benign.s
-CLASSIFICATION_TYPE = 'binary'
+# For binary classification, only melanoma ('mel') is malignant; all others are benigns
+CLASSIFICATION_TYPE = 'multiclass'
 
 # --- Model Configuration ---
-MODEL_TYPE = 'efficientnetb0' # Options: 'efficientnetb0', 'resnet50', 'resnet101', 'densenet121', 'vit'
+MODEL_TYPE = 'resnet50' # Options: 'efficientnetb0', 'vgg16', 'resnet50', 'resnet101', 'densenet121', 'vit'
 
 # Image dimensions
 IMG_HEIGHT = 224
@@ -39,8 +39,8 @@ PRETRAINED_WEIGHTS = 'imagenet'
 
 # --- Training Configuration ---
 BATCH_SIZE = 128
-EPOCHS = 150
-LEARNING_RATE = 1e-4
+EPOCHS = 20
+LEARNING_RATE = 3e-5
 
 # Data augmentation settings
 AUGMENTATION = True
@@ -64,7 +64,7 @@ VALIDATION_SPLIT_RATIO = 0.2 # Used if USE_KFOLD is False
 RANDOM_STATE = 42 # For reproducibility
 
 # --- Output Configuration ---
-MODEL_SAVE_DIR = f'trained_models/{CLASSIFICATION_TYPE}/{MODEL_TYPE}/'
+MODEL_SAVE_DIR = f'models/{CLASSIFICATION_TYPE}/{MODEL_TYPE}/'
 LOG_DIR = f'logs/{CLASSIFICATION_TYPE}/{MODEL_TYPE}/'
 
 # --- Hardware Configuration ---

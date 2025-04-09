@@ -7,6 +7,9 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 
 
+# ---
+# Utility functions for plotting and metrics
+# ---
 def plot_training_history(history, fold=None):
     """
     Plots the training and validation accuracy and loss.
@@ -85,7 +88,7 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
         
         plt.figure()
         plt.plot(fpr, tpr, label=f'ROC curve (area = {roc_auc:0.2f})')
-        plt.plot([0, 1], [0, 1], 'k--', label='Random Guess')
+        plt.plot([0, 1], [0, 1], 'k--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
         plt.xlabel('False Positive Rate')
@@ -114,7 +117,7 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
             
             plt.figure()
             plt.plot(fpr, tpr, label=f'ROC curve (area = {roc_auc:0.2f})')
-            plt.plot([0, 1], [0, 1], 'k--', label='Random Guess')
+            plt.plot([0, 1], [0, 1], 'k--')
             plt.xlim([0.0, 1.0])
             plt.ylim([0.0, 1.05])
             plt.xlabel('False Positive Rate')
@@ -132,7 +135,9 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
             plt.close()
 
 
+# ---
 # Define a custom multiclass ROC-AUC metric
+# ---
 class MulticlassROC_AUC(tf.keras.metrics.Metric):
     def __init__(self, num_classes, name='roc_auc', **kwargs):
         super(MulticlassROC_AUC, self).__init__(name=name, **kwargs)

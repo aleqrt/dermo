@@ -5,8 +5,10 @@ from transformers import TFViTModel
 
 import config
 
-# --- Model Building Functions ---
 
+# ---
+# Model Building Functions 
+# ---
 def build_cnn_model(input_shape, num_classes, pretrained_weights='imagenet', backbone='efficientnetb0'):
     """
     Builds a Convolutional Neural Network (CNN) model.
@@ -23,20 +25,24 @@ def build_cnn_model(input_shape, num_classes, pretrained_weights='imagenet', bac
 
     # Select the backbone model based on the provided parameter.
     backbone = backbone.lower()
-    if backbone == 'efficientnetb0':
-        print("Building CNN model (EfficientNetB0)...")
-        BaseModel = tf.keras.applications.EfficientNetB0
-    elif backbone == 'resnet50':
-        print("Building CNN model (ResNet50)...")
+    try:
+        if backbone == 'efficientnetb0':
+            print("Building CNN model (EfficientNetB0)...")
+            BaseModel = tf.keras.applications.EfficientNetB0
+        elif backbone == 'vgg16':
+            print("Building CNN model (VGG16)...")
+            BaseModel = tf.keras.applications.VGG16
+        elif backbone == 'resnet50':
+            print("Building CNN model (ResNet50)...")
+            BaseModel = tf.keras.applications.ResNet50
+        elif backbone == 'resnet101':
+            print("Building CNN model (ResNet101)...")
+            BaseModel = tf.keras.applications.ResNet101
+        elif backbone == 'densenet121':
+            print("Building CNN model DenseNet121...")
+            BaseModel = tf.keras.applications.DenseNet121
+    except AttributeError:
         BaseModel = tf.keras.applications.ResNet50
-    elif backbone == 'resnet101':
-        print("Building CNN model (ResNet101)...")
-        BaseModel = tf.keras.applications.ResNet101
-    elif backbone == 'densenet101':
-        # TensorFlow Keras does not provide DenseNet101; using DenseNet121 as a proxy.
-        print("Building CNN model (DenseNet101 -> DenseNet121)...")
-        BaseModel = tf.keras.applications.DenseNet121
-    else:
         raise ValueError(f"Unsupported backbone: {backbone}")
     
     # Load pre-trained base model (without the top classification layers)
@@ -45,10 +51,10 @@ def build_cnn_model(input_shape, num_classes, pretrained_weights='imagenet', bac
                            input_shape=input_shape)
 
     # Freeze the base model layers initially (optional, for fine-tuning)
-    # base_model.trainable = False
+    base_model.trainable = True
 
     # Pass input through the base model
-    x = base_model(x, training=True)
+    x = base_model(x, training=False)  # Set training=False to avoid batch norm updates
 
     # Add custom classification head with two extra dense layers
     x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
@@ -103,8 +109,9 @@ def build_vit_model(input_shape, num_classes, pretrained_weights='imagenet'):
     return model
 
 
-# --- Model Selection Function ---
-
+# ---
+# Model Selection Function 
+# ---
 def get_model(model_type=config.MODEL_TYPE):
     """Selects and builds the specified model."""
     if model_type in ['efficientnetb0', 'resnet50', 'resnet101', 'densenet121']:

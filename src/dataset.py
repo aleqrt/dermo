@@ -1,13 +1,17 @@
-import tensorflow as tf
-import pandas as pd
 import os
-from sklearn.model_selection import StratifiedKFold, train_test_split
+import numpy as np
+import pandas as pd
+
+import tensorflow as tf
+
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 import config # Import configuration settings
 
-# --- Data Loading ---
-
+# ---
+# Data Loading 
+# ---
 def load_metadata(metadata_path):
     """Loads the metadata CSV file."""
     try:
@@ -64,96 +68,147 @@ def get_image_path(image_id):
     return paths
 
 
-def prepare_data(metadata_df):
-    """Prepares image paths and labels from the metadata.
-    
-    If classification is multiclass, get_image_path returns a list of file paths (augmented and original)
-    and we explode the list. If binary classification is selected, we load only the original images.
-    Then, if binary classification is selected, we convert the 'dx' labels into binary labels
-    (only 'mel' is malignant, all others benign).
+def balance_data(metadata_df, label_column='dx'):
     """
-    # Load image paths differently depending on classification type.
-    if config.CLASSIFICATION_TYPE == 'binary':
-        # For binary classification, use only original images.
+    Balance the dataset by removing samples from majority classes.
+    Uses the median class cardinality as a reference point.
+    
+    Parameters:
+    -----------
+    metadata_df : pandas.DataFrame
+        DataFrame containing the dataset metadata
+    label_column : str
+        Column name containing the class labels
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        Balanced DataFrame with samples removed from majority classes
+    dict
+        Class distribution statistics before and after balancing
+    """
+    # Store original dataframe for reference
+    original_df = metadata_df.copy()
+    
+    # Check class distribution
+    class_counts = metadata_df[label_column].value_counts()
+    n_classes = len(class_counts)
+    
+    # Determine if binary or multiclass
+    classification_type = 'binary' if n_classes == 2 else 'multiclass'
+    
+    # Calculate median class cardinality as reference
+    median_count = int(np.median(class_counts.values))
+    
+    print(f"Classification type: {classification_type} ({n_classes} classes)")
+    print("Original class distribution:")
+    for cls, count in class_counts.items():
+        print(f"  {cls}: {count}")
+    
+    print(f"\nUsing median class cardinality as reference: {median_count} samples")
+    
+    # Initialize balanced dataframe
+    balanced_df = pd.DataFrame()
+    
+    # Balance classes
+    for cls, count in class_counts.items():
+        class_samples = metadata_df[metadata_df[label_column] == cls]
+        
+        if count > median_count:
+            # Randomly select 'median_count' samples from this class
+            balanced_class = class_samples.sample(n=median_count, random_state=config.RANDOM_STATE)
+            print(f"  {cls}: Reduced from {count} to {median_count} samples (-{count - median_count})")
+        else:
+            # Keep all samples for classes with count <= median_count
+            balanced_class = class_samples
+            print(f"  {cls}: Kept all {count} samples")
+        
+        balanced_df = pd.concat([balanced_df, balanced_class])
+    
+    # Reset index for the balanced dataframe
+    balanced_df = balanced_df.reset_index(drop=True)
+    
+    # Calculate distribution statistics
+    stats = {
+        'original_distribution': class_counts.to_dict(),
+        'balanced_distribution': balanced_df[label_column].value_counts().to_dict(),
+        'classification_type': classification_type,
+        'n_classes': n_classes,
+        'median_cardinality': median_count,
+        'original_total': len(original_df),
+        'balanced_total': len(balanced_df),
+        'removed_samples': len(original_df) - len(balanced_df)
+    }
+    
+    return balanced_df, stats
+
+
+def prepare_data(metadata_df, balance=True, label_column='dx'):
+    """
+    Prepares image paths and labels from the metadata.
+    Optionally balances the dataset using the median cardinality strategy.
+    
+    Parameters:
+    -----------
+    metadata_df : pandas.DataFrame
+        DataFrame containing the dataset metadata
+    balance : bool
+        Whether to balance the dataset by removing samples from majority classes
+    label_column : str
+        Column name containing the class labels
+    
+    Returns:
+    --------
+    tuple
+        (image_paths, labels, class_names, stats)
+    """     
+    # Continue with your existing data preparation code
+    classification_type = 'binary' if len(metadata_df[label_column].unique()) == 2 else 'multiclass'
+    
+    # Load image paths differently depending on classification type
+    if classification_type == 'binary':
+        # For binary classification, use only original images
         metadata_df['image_path'] = metadata_df['image_id'].apply(get_original_image_path)
     else:
-        # For multiclass, load all images (augmented and original).
+        # For multiclass, load all images (augmented and original)
         metadata_df['image_path'] = metadata_df['image_id'].apply(get_image_path)
-        # Explode if the column contains lists.
+        # Explode if the column contains lists
         if metadata_df['image_path'].apply(lambda x: isinstance(x, list)).any():
             metadata_df = metadata_df.explode('image_path')
     
-    # Drop rows where no image path was found.
+    # Drop rows where no image path was found
     metadata_df = metadata_df.dropna(subset=['image_path'])
-    print(f"Data prepared. Found {metadata_df.shape[0]} images.")
+    print(f"Data prepared. Found {metadata_df.shape[0]} images after path resolution.")
 
-    if config.CLASSIFICATION_TYPE == 'binary':
-        # For binary classification: only 'mel' is malignant (1), others benign (0).
-        metadata_df['label_binary'] = metadata_df['dx'].apply(lambda x: 1 if x == 'mel' else 0)
-        # Cast to float32 and reshape to (n_samples, 1) for BinaryCrossentropy.
+    if classification_type == 'binary':
+        # For binary classification: only 'mel' is malignant (1), others benign (0)
+        metadata_df['label_binary'] = metadata_df[label_column].apply(lambda x: 1 if x == 'mel' else 0)
+        # Cast to float32 and reshape to (n_samples, 1) for BinaryCrossentropy
         labels = metadata_df['label_binary'].values.astype('float32').reshape(-1, 1)
         class_names = ['benign', 'malignant']
-        print("Binary classification: 'mel' => malignant (1), others => benign (0)")
     else:
         label_encoder = LabelEncoder()
-        metadata_df['label_encoded'] = label_encoder.fit_transform(metadata_df['dx'])
+        metadata_df['label_encoded'] = label_encoder.fit_transform(metadata_df[label_column])
         labels = metadata_df['label_encoded'].values
         class_names = label_encoder.classes_
-        print("Classes:", class_names)
-        print("Label encoding:", dict(zip(class_names, range(len(class_names)))))
-
-    # Print the number of instances per class (will reflect the original distribution).
-    counts = metadata_df['dx'].value_counts()
-    print("Number of instances per class:")
-    for cls, count in counts.items():
-        print(f"  {cls}: {count}")
-
-    image_paths = metadata_df['image_path'].values
-    return image_paths, labels, class_names
-
-
-
-
-'''def prepare_data(metadata_df):
-    """Prepares image paths and labels from the metadata, including augmented images.
     
-    This function applies get_image_path to produce a list of image paths for each image_id,
-    then explodes the list so each row corresponds to one file (original or augmented).
-    """
-    # Get list of image paths (each entry will be a list)
-    metadata_df['image_paths'] = metadata_df['image_id'].apply(get_image_path)
-    # Drop rows where no images were found
-    metadata_df = metadata_df[metadata_df['image_paths'].apply(lambda x: len(x) > 0)]
-    # Explode so each row is one image file
-    metadata_df = metadata_df.explode('image_paths')
-    # Rename column for consistency
-    metadata_df = metadata_df.rename(columns={'image_paths': 'image_path'})
-    
-    print(f"Data prepared. Found {metadata_df.shape[0]} images (including augmented images).")
-
-    # Encode labels (dx column contains the lesion type)
-    label_encoder = LabelEncoder()
-    metadata_df['label_encoded'] = label_encoder.fit_transform(metadata_df['dx'])
-
-    # Store class names for later use if needed
-    class_names = label_encoder.classes_
-    print("Classes:", class_names)
-    print("Label encoding:", dict(zip(class_names, range(len(class_names)))))
-
-    # Print the number of instances per class
-    counts = metadata_df['dx'].value_counts()
-    print("Number of instances per class:")
-    for cls, count in counts.items():
-        print(f"  {cls}: {count}")
-
     image_paths = metadata_df['image_path'].values
-    labels = metadata_df['label_encoded'].values
 
-    return image_paths, labels, class_names'''
+    balancing_stats = None
+    # Apply balancing if requested
+    if balance:
+        metadata_df, balancing_stats = balance_data(
+            metadata_df, 
+            label_column=label_column
+        )
+    
+    # Include balancing stats in return
+    return image_paths, labels, class_names, balancing_stats
 
 
-# --- Data Splitting ---
-
+# ---
+# Data Splitting 
+# ---
 def get_train_val_split(image_paths, labels):
     """Splits data into training and validation sets."""
     X_train, X_val, y_train, y_val = train_test_split(
@@ -168,18 +223,15 @@ def get_train_val_split(image_paths, labels):
 
 def get_kfold_splits(image_paths, labels):
     """Generates indices for K-Fold cross-validation splits."""
-    # Note: For Triple Stratified K-Fold, you would use a custom implementation
-    # that takes multiple grouping factors into account (e.g., patient_id, dx).
-    # The library 'iterative-stratification' can sometimes handle multi-label stratification.
-    # Here we use standard StratifiedKFold based on the target label ('dx').
-    skf = StratifiedKFold(n_splits=config.N_SPLITS, shuffle=True, random_state=config.RANDOM_STATE)
+    skf = KFold(n_splits=config.N_SPLITS, shuffle=True, random_state=config.RANDOM_STATE)
     fold_indices = list(skf.split(image_paths, labels))
-    print(f"Generated {len(fold_indices)} folds using StratifiedKFold.")
+    print(f"Generated {len(fold_indices)} folds using KFold.")
     return fold_indices
 
 
-# --- Image Preprocessing and Augmentation ---
-
+# ---
+# Image Preprocessing and Augmentation 
+# ---
 def decode_image(image_path):
     """Reads and decodes an image file."""
     img = tf.io.read_file(image_path)
@@ -188,7 +240,6 @@ def decode_image(image_path):
     # Resize the image to the desired size.
     img = tf.image.resize(img, [config.IMG_HEIGHT, config.IMG_WIDTH])
     # Normalize pixel values if needed (e.g., [0, 1] or [-1, 1])
-    # Keras application models often have their own preprocessing layers or functions
     # img = img / 255.0
     return img
 
@@ -197,16 +248,16 @@ def build_augmentation_pipeline():
     """Builds a sequential model for data augmentation."""
     # Use Keras preprocessing layers for augmentation
     # These layers are active only during training.
-    data_augmentation = tf.keras.Sequential([
+    augmentations = tf.keras.Sequential([
         tf.keras.layers.RandomFlip(
-            "horizontal" if config.HORIZONTAL_FLIP else "vertical" if config.VERTICAL_FLIP else "horizontal_and_vertical" if config.HORIZONTAL_FLIP and config.VERTICAL_FLIP else "",
+            "horizontal" if config.HORIZONTAL_FLIP else "vertical" if config.VERTICAL_FLIP else None,
              input_shape=config.INPUT_SHAPE),
         tf.keras.layers.RandomRotation(config.ROTATION_RANGE),
         tf.keras.layers.RandomZoom(config.ZOOM_RANGE),
         tf.keras.layers.RandomTranslation(height_factor=config.HEIGHT_SHIFT_RANGE, width_factor=config.WIDTH_SHIFT_RANGE),
-        # Add other augmentations as needed (e.g., RandomContrast, RandomBrightness)
-    ], name='data_augmentation')
-    return data_augmentation
+    ], name='augmentations')
+
+    return augmentations
 
 # Create the augmentation pipeline once
 augmentation_pipeline = build_augmentation_pipeline() if config.AUGMENTATION else None
@@ -215,28 +266,38 @@ augmentation_pipeline = build_augmentation_pipeline() if config.AUGMENTATION els
 def preprocess_image(image_path, label, augment):
     """Loads, preprocesses, and potentially augments an image."""
     img = decode_image(image_path)
-
-    # Apply model-specific preprocessing (e.g., for EfficientNet, ResNet, ViT)
+    
+    # Apply model-specific preprocessing
     img = img / 255.0
-
-    '''# Apply augmentation if specified and if not already an augmented image
-    if augment and ("aug" not in image_path.lower()):
-        if augmentation_pipeline:
-            # Add a batch dimension, apply augmentation, and remove the batch dimension.
-            img = tf.expand_dims(img, axis=0)
-            img = augmentation_pipeline(img, training=True)
-            img = tf.reshape(img, config.INPUT_SHAPE)'''
+    
+    # Check for "aug" using TensorFlow string operations
+    if augment:
+        contains_aug = tf.strings.regex_full_match(
+            tf.strings.lower(image_path), ".*aug.*")
+        
+        should_augment = tf.logical_not(contains_aug)
+        
+        # Conditionally apply augmentation
+        def apply_aug():
+            augmented = tf.expand_dims(img, axis=0)
+            augmented = augmentation_pipeline(augmented, training=True)
+            return tf.reshape(augmented, config.INPUT_SHAPE)
+        
+        img = tf.cond(should_augment, 
+                     true_fn=apply_aug,
+                     false_fn=lambda: img)
+    
     return img, label
 
 
-# --- tf.data.Dataset Creation ---
-
+# ---
+# tf.data.Dataset Creation 
+# ---
 def create_dataset(image_paths, labels, batch_size, augment=False, shuffle=True):
     """Creates a tf.data.Dataset from image paths and labels."""
     dataset = tf.data.Dataset.from_tensor_slices((image_paths, labels))
 
     if shuffle:
-        # Perfect shuffling requires estimating buffer size
         buffer_size = len(image_paths) # Use full dataset size for perfect shuffle (memory intensive)
         # buffer_size = tf.data.AUTOTUNE # Or let TF decide
         dataset = dataset.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=True)
