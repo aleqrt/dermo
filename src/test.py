@@ -24,7 +24,7 @@ MODEL_NAME = f"{config.MODEL_TYPE.upper()}_multiclass_best_overall.keras"
 BEST_MODEL_PATH = os.path.join(config.MODEL_SAVE_DIR, MODEL_NAME)
 
 # Make sure the logging directory exists
-os.makedirs(config.LOG_DIR, 'test', exist_ok=True)
+os.makedirs(os.path.join(config.LOG_DIR, 'test'), exist_ok=True)
 
 
 def load_test_metadata(metadata_path):
