@@ -138,6 +138,7 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
 # ---
 # Define a custom multiclass ROC-AUC metric
 # ---
+@tf.keras.utils.register_keras_serializable(package='utils')
 class MulticlassROC_AUC(tf.keras.metrics.Metric):
     def __init__(self, num_classes, name='roc_auc', **kwargs):
         super(MulticlassROC_AUC, self).__init__(name=name, **kwargs)
@@ -155,3 +156,13 @@ class MulticlassROC_AUC(tf.keras.metrics.Metric):
 
     def reset_states(self):
         self.auc.reset_states()
+    
+    # Add get_config and from_config methods for proper serialization
+    def get_config(self):
+        config = super(MulticlassROC_AUC, self).get_config()
+        config.update({"num_classes": self.num_classes})
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)

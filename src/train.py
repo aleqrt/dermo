@@ -116,7 +116,7 @@ if metadata_df is not None:
         )
         early_stopping = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',     
-            patience=8,            
+            patience=20,            
             verbose=1,
             mode='min',             
             restore_best_weights=True 

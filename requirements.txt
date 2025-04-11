@@ -1,5 +1,6 @@
 tensorflow
 pandas
+seaborn
 scikit-learn
 matplotlib
 tensorflow-hub

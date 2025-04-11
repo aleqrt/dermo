@@ -16,7 +16,7 @@ IMAGE_DIR_PART2 = os.path.join(DATA_DIR, 'HAM10000_images_part_2')
 CLASSIFICATION_TYPE = 'multiclass'
 
 # --- Model Configuration ---
-MODEL_TYPE = 'resnet50' # Options: 'efficientnetb0', 'vgg16', 'resnet50', 'resnet101', 'densenet121', 'vit'
+MODEL_TYPE = 'densenet121' # Options: 'efficientnetb0', 'vgg16', 'resnet50', 'resnet101', 'densenet121', 'vit'
 
 # Image dimensions
 IMG_HEIGHT = 224
