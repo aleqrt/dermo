@@ -1,9 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
-import tensorflow_hub as hub 
-from transformers import TFViTModel
 
 import config
+from vit import Patches, PatchEncoder, mlp
 
 
 # ---
@@ -85,27 +84,51 @@ def build_cnn_model(input_shape, num_classes, pretrained_weights='imagenet', bac
     return model
 
 
-def build_vit_model(input_shape, num_classes, pretrained_weights='imagenet'):
-    """
-    Builds a Vision Transformer (ViT) model.
-    Uses Keras ViT implementation (available from TF 2.16+) or TF Hub/Transformers.
-    Note: ViT preprocessing (patching, embedding) is handled internally by these layers.
-          Ensure input images are appropriately sized and normalized (usually [0,1] or [-1,1]).
-    """
-    print("Using TensorFlow Hub for ViT...")
-        
-    vit_handle = "https://tfhub.dev/google/vit_b16/1"  # Base ViT model from TF Hub
+def build_vit_model(input_shape=(224, 224, 3), patch_size=16, num_classes=7, projection_dim=64, transformer_layers=8,
+                    num_heads=4, transformer_units=[128, 64], mlp_head_units=[2048, 1024], dropout_rate=0.1):
+    print("Building ViT-B16 model ...")
     inputs = layers.Input(shape=input_shape)
-    
-    # Ensure input matches Hub model expectations (often float32 [0, 1])
-    hub_layer = hub.KerasLayer(vit_handle, trainable=False)
-    x = hub_layer(inputs)
-    
-    x = layers.Dropout(0.3)(x)
-    outputs = layers.Dense(num_classes, activation='softmax', name='predictions')(x)
-    
-    model = models.Model(inputs, outputs, name='ViT_Hub_Model')
-    print("ViT Model (TF Hub) Built.")
+    # Data augmentation
+    augmented = layers.Rescaling(1.0 / 255)(inputs)
+    augmented = layers.Resizing(input_shape[0], input_shape[1])(augmented)
+    augmented = layers.RandomFlip("horizontal")(augmented)
+    augmented = layers.RandomRotation(factor=0.02)(augmented)
+    augmented = layers.RandomZoom(height_factor=0.2, width_factor=0.2)(augmented)
+
+    # Create patches.
+    patches = Patches(patch_size)(augmented)
+    num_patches = (input_shape[0] // patch_size) ** 2
+
+    # Encode patches.
+    encoded_patches = PatchEncoder(num_patches, projection_dim)(patches)
+
+    # Create multiple layers of the Transformer block.
+    for _ in range(transformer_layers):
+        # Layer normalization 1.
+        x1 = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
+        # Create a multi-head attention layer.
+        attention_output = layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=projection_dim, dropout=dropout_rate
+        )(x1, x1)
+        # Skip connection 1.
+        x2 = layers.Add()([attention_output, encoded_patches])
+        # Layer normalization 2.
+        x3 = layers.LayerNormalization(epsilon=1e-6)(x2)
+        # MLP.
+        x3 = mlp(x3, hidden_units=transformer_units, dropout_rate=dropout_rate)
+        # Skip connection 2.
+        encoded_patches = layers.Add()([x3, x2])
+
+    # Create a [batch_size, projection_dim] tensor.
+    representation = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
+    representation = layers.Flatten()(representation)
+    representation = layers.Dropout(dropout_rate)(representation)
+    # Add MLP.
+    features = mlp(representation, hidden_units=mlp_head_units, dropout_rate=dropout_rate)
+    # Classify outputs.
+    logits = layers.Dense(num_classes)(features)
+    # Create the Keras model.
+    model = models.Model(inputs=inputs, outputs=logits)
     return model
 
 
@@ -119,11 +142,11 @@ def get_model(model_type=config.MODEL_TYPE):
                                 config.NUM_CLASSES, 
                                 pretrained_weights=config.PRETRAINED_WEIGHTS, 
                                 backbone=model_type)
-    elif model_type == 'ViT':
+    elif model_type == 'vit':
         model = build_vit_model(
             input_shape=config.INPUT_SHAPE,
             num_classes=config.NUM_CLASSES,
-            pretrained_weights=config.PRETRAINED_WEIGHTS # Adjust if ViT uses different source
+            patch_size=config.PATCH_SIZE,
         )
     else:
         model = build_cnn_model(config.INPUT_SHAPE, 

@@ -16,12 +16,13 @@ IMAGE_DIR_PART2 = os.path.join(DATA_DIR, 'HAM10000_images_part_2')
 CLASSIFICATION_TYPE = 'multiclass'
 
 # --- Model Configuration ---
-MODEL_TYPE = 'densenet121' # Options: 'efficientnetb0', 'vgg16', 'resnet50', 'resnet101', 'densenet121', 'vit'
+MODEL_TYPE = 'vit' # Options: 'efficientnetb0', 'vgg16', 'resnet50', 'resnet101', 'densenet121', 'vit'
 
 # Image dimensions
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
 IMG_CHANNELS = 3
+PATCH_SIZE = 16
 INPUT_SHAPE = (IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
 
 if CLASSIFICATION_TYPE == 'binary':
@@ -39,8 +40,8 @@ PRETRAINED_WEIGHTS = 'imagenet'
 
 # --- Training Configuration ---
 BATCH_SIZE = 128
-EPOCHS = 70
-LEARNING_RATE = 3e-5
+EPOCHS = 100
+LEARNING_RATE = 1e-4  # Use 3e-5 for CNN models, and 1e-4 for ViT models
 
 # Data augmentation settings
 AUGMENTATION = True
