@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+@keras.saving.register_keras_serializable(package="vit_components")
 class Patches(layers.Layer):
     def __init__(self, patch_size):
         super().__init__()
@@ -20,6 +21,7 @@ class Patches(layers.Layer):
         patches = tf.reshape(patches, [batch_size, -1, patch_dims])
         return patches
 
+@keras.saving.register_keras_serializable(package="vit_components")
 class PatchEncoder(layers.Layer):
     def __init__(self, num_patches, projection_dim):
         super().__init__()
