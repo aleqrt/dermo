@@ -313,3 +313,69 @@ def create_dataset(image_paths, labels, batch_size, augment=False, shuffle=True)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
     return dataset
+
+def load_test_metadata(metadata_path=config.TEST_METADATA_FILE):
+    """Loads the test metadata CSV file."""
+    try:
+        df = pd.read_csv(metadata_path)
+        print(f"Test metadata loaded successfully from {metadata_path}. Shape: {df.shape}")
+        return df
+    except FileNotFoundError:
+        print(f"Error: Test metadata file not found at {metadata_path}")
+        return None
+
+
+def get_test_image_path(image_id, test_image_dir=config.TEST_IMAGES_DIR):
+    """Returns the test image path for a given image ID."""
+    path = os.path.join(test_image_dir, f"{image_id}.jpg")
+    if os.path.exists(path):
+        return path
+    else:
+        return None
+
+
+def prepare_test_data(metadata_df, label_column='dx'):
+    """
+    Prepares test image paths and labels from the test metadata.
+    
+    Parameters:
+    -----------
+    metadata_df : pandas.DataFrame
+        DataFrame containing the test metadata
+    label_column : str
+        Column name containing the class labels
+    
+    Returns:
+    --------
+    tuple
+        (image_paths, labels, class_names)
+    """
+    # Get the mapping of class names from the training dataset
+    # For ISIC2018 Task3, the classes should match HAM10000
+    class_names = ['akiec', 'bcc', 'bkl', 'df', 'mel', 'nv', 'vasc']
+    
+    # Ensure the DataFrame has an 'image_id' column
+    if 'image' in metadata_df.columns:
+        metadata_df['image_id'] = metadata_df['image'].str.replace('.jpg', '')
+    
+    # Get image paths
+    metadata_df['image_path'] = metadata_df['image_id'].apply(get_test_image_path)
+    
+    # Drop rows where no image path was found
+    metadata_df = metadata_df.dropna(subset=['image_path'])
+    print(f"Test data prepared. Found {metadata_df.shape[0]} images after path resolution.")
+
+    # Encode labels - ISIC2018 Task3 has ground truth in one-hot format
+    # Convert one-hot encoded ground truth to class indices
+    if all(col in metadata_df.columns for col in class_names):
+        # The columns are already one-hot encoded
+        labels = np.argmax(metadata_df[class_names].values, axis=1)
+    else:
+        # The column contains class names
+        # Create a mapping of class names to indices
+        class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+        labels = metadata_df[label_column].map(class_to_idx).values
+    
+    image_paths = metadata_df['image_path'].values
+    
+    return image_paths, labels, class_names

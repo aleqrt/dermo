@@ -1,11 +1,14 @@
-import matplotlib.pyplot as plt
+import os
 import tensorflow as tf
 import numpy as np
-import os
-import config 
-from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.metrics import roc_curve, auc, confusion_matrix
 from sklearn.preprocessing import label_binarize
 
+import config 
 
 # ---
 # Utility functions for plotting and metrics
@@ -80,6 +83,10 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
       fold: int, optional
           Fold number for saving the plots (used to create a fold-specific folder).
     """
+    fold_subdir = f"fold_{fold+1}" if fold is not None else "test" # Use 'test' subdir if fold is None
+    save_dir = os.path.join(config.LOG_DIR, fold_subdir) # Use config.LOG_DIR as base
+    os.makedirs(save_dir, exist_ok=True)
+    
     if config.CLASSIFICATION_TYPE == 'binary':
         # For binary classification, flatten predictions.
         y_pred_probs = np.squeeze(y_pred_probs)
@@ -97,10 +104,6 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
         plt.legend(loc="lower right")
         
         plot_filename = "roc_curve_binary.png"
-        # If fold is provided, create a fold-specific directory.
-        fold_dir = f"fold_{fold+1}" if fold is not None else ""
-        save_dir = os.path.join(config.LOG_DIR, fold_dir)
-        os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, plot_filename)
         plt.savefig(save_path)
         print(f"ROC curve (binary) saved to {save_path}")
@@ -126,9 +129,6 @@ def plot_roc_curves(y_true, y_pred_probs, class_names, fold=None):
             plt.legend(loc="lower right")
             
             plot_filename = f"roc_curve_class_{class_names[i]}.png"
-            fold_dir = f"fold_{fold+1}" if fold is not None else ""
-            save_dir = os.path.join(config.LOG_DIR, fold_dir)
-            os.makedirs(save_dir, exist_ok=True)
             save_path = os.path.join(save_dir, plot_filename)
             plt.savefig(save_path)
             print(f"ROC curve for class {class_names[i]} saved to {save_path}")
@@ -166,3 +166,32 @@ class MulticlassROC_AUC(tf.keras.metrics.Metric):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+    
+
+def plot_confusion_matrix(y_true, y_pred, class_names):
+    """
+    Plots and saves the confusion matrix.
+    
+    Parameters:
+    -----------
+    y_true : array-like
+        True class indices
+    y_pred : array-like
+        Predicted class indices
+    class_names : list
+        List of class names
+    """
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, 
+                yticklabels=class_names)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    
+    # Save the plot
+    save_path = os.path.join(config.LOG_DIR, 'test', 'test_confusion_matrix.png')
+    plt.savefig(save_path)
+    print(f"Confusion matrix saved to {save_path}")
+    plt.close()

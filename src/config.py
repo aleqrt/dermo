@@ -1,14 +1,32 @@
-import tensorflow as tf
+
 import os
+from pathlib import Path
+import tensorflow as tf
+
 from utils import MulticlassROC_AUC
 
+# Set the random seed for reproducibility
+RANDOM_STATE = 42
+
+# --- Path Resolution ---
+# Get the absolute path to the source directory (where this config.py file is located)
+SRC_DIR = Path(__file__).resolve().parent
+
+# Get the absolute path to the project root (parent directory of src)
+PROJECT_ROOT = SRC_DIR.parent
+DATA_ROOT = PROJECT_ROOT.parent
+
 # --- Data Configuration ---
-DATA_DIR = '../dataset/ham10000/'
+DATA_DIR = os.path.join(DATA_ROOT, 'dataset/ham10000/')
 METADATA_FILE = os.path.join(DATA_DIR, 'HAM10000_metadata.csv')
 IMAGE_DIR_PART1 = os.path.join(DATA_DIR, 'HAM10000_images_part_1')
 IMAGE_DIR_PART2 = os.path.join(DATA_DIR, 'HAM10000_images_part_2')
 # Or if images are in one folder:
 # IMAGE_DIR = os.path.join(DATA_DIR, 'images/')
+
+# --- Test Data Configuration ---
+TEST_IMAGES_DIR = os.path.join(DATA_DIR, 'ISIC2018_Task3_Test_Images', 'ISIC2018_Task3_Test_Images')
+TEST_METADATA_FILE = os.path.join(DATA_DIR, 'ISIC2018_Task3_Test_GroundTruth.csv')
 
 # --- Classification Type ---
 # Options: 'multiclass', 'binary'
@@ -71,3 +89,13 @@ LOG_DIR = f'logs/{CLASSIFICATION_TYPE}/{MODEL_TYPE}/'
 # --- Hardware Configuration ---
 # Set to True if using mixed precision (requires compatible GPU)
 USE_MIXED_PRECISION = False # Can speed up training on NVIDIA GPUs
+
+# --- Best Model Configuration ---
+# Define the naming convention for the model saved after K-Fold comparison
+BEST_OVERALL_MODEL_NAME = f"{MODEL_TYPE.upper()}_{CLASSIFICATION_TYPE}_best_overall.keras"
+BEST_MODEL_PATH = os.path.join(MODEL_SAVE_DIR, BEST_OVERALL_MODEL_NAME)
+# Note: MODEL_SAVE_DIR depends on CLASSIFICATION_TYPE and MODEL_TYPE
+
+# --- Output Configuration ---
+# Add a specific subdir for test logs/outputs
+TEST_LOG_DIR = os.path.join(LOG_DIR, 'test/')

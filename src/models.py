@@ -142,19 +142,17 @@ def get_model(model_type=config.MODEL_TYPE):
                                 config.NUM_CLASSES, 
                                 pretrained_weights=config.PRETRAINED_WEIGHTS, 
                                 backbone=model_type)
-    else:
-        model = build_cnn_model(config.INPUT_SHAPE, 
-                                config.NUM_CLASSES, 
-                                pretrained_weights=config.PRETRAINED_WEIGHTS, 
-                                backbone='resnet50')
-        raise ValueError(f"Unknown model type: {model_type}. Build default ResNet50 backbone model.")
-    """
-    # TODO: fix ViT implementation
     elif model_type == 'vit':    
         model = build_vit_model(
             input_shape=config.INPUT_SHAPE,
             num_classes=config.NUM_CLASSES,
             patch_size=config.PATCH_SIZE,
         )
-    """
+    else:
+        model = build_cnn_model(config.INPUT_SHAPE, 
+                                config.NUM_CLASSES, 
+                                pretrained_weights=config.PRETRAINED_WEIGHTS, 
+                                backbone='resnet50')
+        raise ValueError(f"Unknown model type: {model_type}. Build default ResNet50 backbone model.")
+    
     return model
