@@ -142,12 +142,13 @@ def get_model(model_type=config.MODEL_TYPE):
                                 config.NUM_CLASSES, 
                                 pretrained_weights=config.PRETRAINED_WEIGHTS, 
                                 backbone=model_type)
-    elif model_type == 'vit':    
-        model = build_vit_model(
-            input_shape=config.INPUT_SHAPE,
-            num_classes=config.NUM_CLASSES,
-            patch_size=config.PATCH_SIZE,
-        )
+    elif model_type == 'vit':  
+        raise ValueError(f"Model type: {model_type} under maintanance.")
+        #model = build_vit_model(
+        #    input_shape=config.INPUT_SHAPE,
+        #    num_classes=config.NUM_CLASSES,
+        #                                 patch_size=config.PATCH_SIZE,
+        #)
     else:
         model = build_cnn_model(config.INPUT_SHAPE, 
                                 config.NUM_CLASSES, 
