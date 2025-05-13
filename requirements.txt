@@ -1,0 +1,10 @@
+tensorflow
+pandas
+seaborn
+scikit-learn
+matplotlib
+tensorflow-hub
+transformers
+flask
+opencv-python
+lime

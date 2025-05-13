@@ -1,0 +1,33 @@
+# Start a training job with default parameters
+curl -X POST http://localhost:5000/train
+
+# Start a training job with custom parameters
+curl -X POST \
+  http://localhost:5000/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_type": "densenet121",
+    "classification_type": "multiclass",
+    "batch_size": 64,
+    "epochs": 50,
+    "learning_rate": 2e-5,
+    "n_splits": 5,
+    "augmentation": true
+  }'
+
+# Start a testing job with the default best model
+curl -X POST http://localhost:5000/test
+
+# Start a testing job with a specific model
+curl -X POST \
+  http://localhost:5000/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/multiclass/densenet121/DENSENET121_multiclass_best_overall.keras",
+  }'
+
+# Check job status (replace JOB_ID with actual job ID)
+curl -X GET http://localhost:5000/jobs/JOB_ID
+
+# Get full job logs (replace JOB_ID with actual job ID)
+curl -X GET http://localhost:5000/jobs/JOB_ID/logs
